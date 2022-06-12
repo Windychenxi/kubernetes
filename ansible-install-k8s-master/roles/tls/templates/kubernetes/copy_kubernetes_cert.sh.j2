@@ -1,0 +1,12 @@
+#!/bin/bash
+{% for host in groups['master'] %}
+	scp ca*.pem kube-controller-manager*.pem token.csv root@{{ hostvars[host].node_name }}:{{ tmp_dir }}/
+{% endfor %}
+
+{% for host in groups['worker'] %}
+	scp ca*.pem token.csv admin*.pem root@{{ hostvars[host].node_name }}:{{ tmp_dir }}/
+{% endfor %}
+
+{% for host in groups['k8s'] %}
+	scp ca*.pem kube-proxy*.pem kube-scheduler*.pem admin*.pem kube-apiserver*.pem root@{{ hostvars[host].node_name }}:{{ tmp_dir }}/
+{% endfor %}

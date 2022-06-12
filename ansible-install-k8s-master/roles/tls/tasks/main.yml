@@ -8,171 +8,100 @@
 
 - name: 创建工作目录
   file:
-    dest: "{{ root_dir.stdout }}/ssl/{{ item }}"
+    path: "{{ root_dir.stdout }}/ssl/{{ item }}"
     state: directory
   with_items:
     - ca
     - etcd
-    - k8s
+    - kubernetes
 
 - name: 准备 cfssl 工具
   unarchive:
-    src: binary_pkg/cfssl.tar.gz
+    src: "{{ software_dir }}/cfssl.tar.gz"
     dest: /usr/bin/
-    mode: u+x
+    mode: 700
 
-# - name: 准备证书请求文件
-#   copy:
-#     src: "etcd/{{ item }}"
-#     dest: "{{ root_dir.stdout }}/ssl/etcd/{{ item }}"
-#   with_items:
-#     - ca-config.json
-#     - ca-csr.json
-#     - server-csr.json
+- name: 分发 CA 证书准备文件 ca-csr.json | ca-config.json
+  copy:
+    src: "ca/{{ item }}"
+    dest: "{{ root_dir.stdout }}/ssl/ca/{{ item }}"
+  with_items: 
+    - ca-csr.json
+    - ca-config.json
 
 #---------------------------------- 创建 CA 证书 -------------------------------------
 
-- name: 分发 CA 证书请求文件
-  copy:
-    src: ca/ca-csr.json
-    dest: "{{ root_dir.stdout }}/ssl/ca/ca-csr.json"
-
 - name: 创建 CA 证书
-  shell: cd {{ root_dir.stdout }}/ssl/ca/ && cfssl gencert -initca ca-csr.json | cfssljson -bare ca
-
-- name: 分发 CA 证书策略
-  copy:
-    src:  ca/ca-config.json
-    dest: "{{ root_dir.stdout }}/ssl/ca/ca-config.json"
+  shell: |
+    cd {{ root_dir.stdout }}/ssl/ca/  \
+    && cfssl gencert -initca ca-csr.json | cfssljson -bare ca
+    
+- name: 拷贝 CA 证书到 etcd | kubernetes 目录
+  shell: |
+    cd {{ root_dir.stdout }}/ssl/ca \
+    && cp -r ca*.pem ca-config.json {{ root_dir.stdout }}/ssl/{{ item }}
+  with_items:
+    - etcd
+    - kubernetes
 
 #---------------------------------- 创建 etcd 证书 -----------------------------------
-
-- name: 分发 etcd 证书请求文件
+   
+- name: 分发 etcd 证书准备文件 etcd-csr.json | copy_etcd_cert.sh
   template:
-    src: etcd/etcd-csr.json.j2
-    dest: "{{ root_dir.stdout }}/ssl/etcd/etcd-csr.json"
-
-#- name: 分发 etcd 请求文件
-#  copy:
-#    src: etcd/etcd-csr.json
-#    dest: "{{ root_dir.stdout }}/ssl/etcd/etcd-csr.json"
-
-- name: 拷贝 CA 证书到 etcd 目录
-  shell: cd {{ root_dir.stdout }}/ssl/ca && cp -r ca*.pem ca-config.json {{ root_dir.stdout }}/ssl/etcd
-
-- name: 创建 etcd 证书
-  shell: cd {{ root_dir.stdout }}/ssl/etcd && cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes etcd-csr.json | cfssljson  -bare etcd
-
-- name: 生成拷贝 etcd 证书脚本
-  template:
-    src: etcd/copy_etcd_cert.sh.j2
-    dest: "{{ root_dir.stdout }}/ssl/etcd/copy_etcd_cert.sh"
+    src: "etcd/{{ item }}"
+    dest: "{{ root_dir.stdout }}/ssl/etcd/{{ item.split('.j2')[0] }}"
     mode: 700
-
-- name: 执行拷贝 etcd 证书脚本，拷贝证书到 root 目录
-  shell: cd {{ root_dir.stdout }}/ssl/etcd/ && sh copy_etcd_cert.sh
-
-#----------------------------  创建 api-server 证书 ----------------------------------
-
-- name: 分发 api-server 证书请求文件
-  template:
-    src: k8s/kube-apiserver-csr.json.j2
-    dest: "{{ root_dir.stdout }}/ssl/k8s/kube-apiserver-csr.json"
+  with_items:
+    - etcd-csr.json.j2
+    - copy_etcd_cert.sh.j2
     
-- name: 拷贝 CA 证书到 k8s 目录
-  shell: cd {{ root_dir.stdout }}/ssl/ca && cp -r ca*.pem ca-config.json {{ root_dir.stdout }}/ssl/k8s
+- name: 创建 etcd 证书
+  shell: |
+    cd {{ root_dir.stdout }}/ssl/etcd/  \
+    && cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes etcd-csr.json | cfssljson  -bare etcd
 
-- name: 创建 apiserver 证书
-  shell: cd {{ root_dir.stdout }}/ssl/k8s && cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-apiserver-csr.json | cfssljson -bare kube-apiserver
+- name: 执行拷贝 etcd 证书脚本，拷贝证书到 tmp 目录
+  shell: |
+    cd {{ root_dir.stdout }}/ssl/etcd/ \
+    && sh copy_etcd_cert.sh
+    
+#----------------------------  创建 kubernetes 证书 ----------------------------------
+
+- name: 分发 kubernetes 证书模板文件（api-server | kubectl | kube-controller-manager | kube-scheduler）
+  template:
+    src: "kubernetes/{{ item }}"
+    dest: "{{ root_dir.stdout }}/ssl/kubernetes/{{ item.split('.j2')[0] }}"
+    mode: 700
+  with_items:
+    - kube-apiserver-csr.json.j2
+    - kube-controller-manager-csr.json.j2
+    - kube-scheduler-csr.json.j2
+    - copy_kubernetes_cert.sh.j2
+
+- name: 分发 kubernetes 证书准备文件
+  copy:
+    src: "kubernetes/{{ item }}"
+    dest: "{{ root_dir.stdout }}/ssl/kubernetes/{{ item }}"
+  with_items:
+    - admin-csr.json
+    - kube-proxy-csr.json
+
+- name: 创建 kubernetes 证书
+  shell: |
+    cd {{ root_dir.stdout }}/ssl/kubernetes \
+    && cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-apiserver-csr.json | cfssljson -bare kube-apiserver \
+    && cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes admin-csr.json | cfssljson -bare admin \
+    && cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-controller-manager-csr.json | cfssljson -bare kube-controller-manager \
+    && cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-scheduler-csr.json | cfssljson -bare kube-scheduler \
+    && cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-proxy-csr.json | cfssljson -bare kube-proxy
 
 - name: 生成 token 文件
   shell: |
-    cat > {{ root_dir.stdout }}/ssl/k8s/token.csv << EOF
+    cat > {{ root_dir.stdout }}/ssl/kubernetes/token.csv << EOF
     $(head -c 16 /dev/urandom | od -An -t x | tr -d ' '),kubelet-bootstrap,10001,"system:kubelet-bootstrap"
     EOF
-
-- name: 生成拷贝 kpiserver 证书及 token 文件脚本
-  template:
-    src: k8s/copy_k8s_cert_token.sh.j2
-    dest: "{{ root_dir.stdout }}/ssl/k8s/copy_k8s_cert_token.sh"
-    mode: 700
-
-- name: 执行拷贝 kube-server 证书脚本，拷贝证书到 root 目录
-  shell: cd {{ root_dir.stdout }}/ssl/k8s/ && sh copy_k8s_cert_token.sh
-
-#----------------------------------创建 kubectl 证书 -------------------------------------
-- name: 分发 kubectl 证书请求文件
-  copy:
-    src: k8s/admin-csr.json
-    dest: "{{ root_dir.stdout }}/ssl/k8s/admin-csr.json"
-
-- name: 创建 kubectl 证书
-  shell: cd {{ root_dir.stdout }}/ssl/k8s && cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes admin-csr.json | cfssljson -bare admin
-
-- name: 生成拷贝 kubectl 证书脚本
-  template:
-    src: k8s/copy_kubectl_cert.sh.j2
-    dest: "{{ root_dir.stdout }}/ssl/k8s/copy_kubectl_cert.sh"
-    mode: 700
-
-- name: 执行拷贝 kubectl 证书脚本，拷贝证书到 root 目录
-  shell: cd {{ root_dir.stdout }}/ssl/k8s/ && sh copy_kubectl_cert.sh
-
-#-------------------------- 创建 kube-controller-manager 证书 ---------------------------------
-- name: 分发 kube-controller-manager 证书请求文件
-  template:
-    src: k8s/kube-controller-manager-csr.json.j2
-    dest: "{{ root_dir.stdout }}/ssl/k8s/kube-controller-manager-csr.json"
-
-- name: 创建 kube-controller-manager 证书
-  shell: cd {{ root_dir.stdout }}/ssl/k8s && cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-controller-manager-csr.json | cfssljson -bare kube-controller-manager
-
-- name: 生成拷贝 kube-controller-manager 证书脚本
-  template:
-    src: k8s/copy_kube_controller_manager_cert.sh.j2
-    dest: "{{ root_dir.stdout }}/ssl/k8s/copy_kube_controller_manager_cert.sh"
-    mode: 700
-
-- name: 执行拷贝 kube-controller-manager 证书脚本，拷贝证书到 root 目录
-  shell: cd {{ root_dir.stdout }}/ssl/k8s/ && sh copy_kube_controller_manager_cert.sh
-
-
-#----------------------------------创建 kube-scheduler 证书 ------------------------------------
-- name: 分发 kube-scheduler 证书请求文件
-  template:
-    src: k8s/kube-scheduler-csr.json.j2
-    dest: "{{ root_dir.stdout }}/ssl/k8s/kube-scheduler-csr.json"
-
-- name: 创建 kube-scheduler 证书
-  shell: cd {{ root_dir.stdout }}/ssl/k8s && cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-scheduler-csr.json | cfssljson -bare kube-scheduler
-
-- name: 生成拷贝 kube-scheduler 证书脚本
-  template:
-    src: k8s/copy_kube_scheduler_cert.sh.j2
-    dest: "{{ root_dir.stdout }}/ssl/k8s/copy_kube_scheduler_cert.sh"
-    mode: 700
-
-- name: 执行拷贝 kube-scheduler 证书脚本，拷贝证书到 root 目录
-  shell: cd {{ root_dir.stdout }}/ssl/k8s/ && sh copy_kube_scheduler_cert.sh
-
-
-#----------------------------------创建 kube-proxy 证书 ------------------------------------
-- name: 拷贝 CA 证书到 etcd 目录
-  shell: cd {{ root_dir.stdout }}/ssl/ca && cp -r ca*.pem ca-config.json {{ root_dir.stdout }}/ssl/k8s
-
-- name: 分发 kube-proxy 证书请求文件
-  copy:
-    src: k8s/kube-proxy-csr.json
-    dest: "{{ root_dir.stdout }}/ssl/k8s/kube-proxy-csr.json"
-
-- name: 创建 kube-proxy 证书
-  shell: cd {{ root_dir.stdout }}/ssl/k8s && cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-proxy-csr.json | cfssljson -bare kube-proxy
-
-- name: 生成拷贝 kube-proxy 证书脚本
-  template:
-    src: k8s/copy_kube_proxy_cert.sh.j2
-    dest: "{{ root_dir.stdout }}/ssl/k8s/copy_kube_proxy_cert.sh"
-    mode: 700
-
-- name: 执行拷贝 kube-proxy 证书脚本，拷贝证书到 root 目录
-  shell: cd {{ root_dir.stdout }}/ssl/k8s/ && sh copy_kube_proxy_cert.sh
+    
+- name: 执行拷贝 kubernetes 证书脚本，拷贝证书到 root 目录
+  shell: |
+    cd {{ root_dir.stdout }}/ssl/kubernetes/  \
+    && sh copy_kubernetes_cert.sh

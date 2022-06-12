@@ -10,15 +10,15 @@ KUBE_APISERVER_OPTS="--enable-admission-plugins=NamespaceLifecycle,NodeRestricti
   --runtime-config=api/all=true \
   --enable-bootstrap-token-auth \
   --service-cluster-ip-range={{ service_cluster_ip_range }} \
-  --token-auth-file={{ k8s_work_dir }}/ssl/token.csv \
+  --token-auth-file={{ kubernetes_work_dir }}/ssl/token.csv \
   --service-node-port-range={{ service_node_port_range }} \
-  --tls-cert-file={{ k8s_work_dir }}/ssl/kube-apiserver.pem  \
-  --tls-private-key-file={{ k8s_work_dir }}/ssl/kube-apiserver-key.pem \
-  --client-ca-file={{ k8s_work_dir }}/ssl/ca.pem \
-  --kubelet-client-certificate={{ k8s_work_dir }}/ssl/kube-apiserver.pem \
-  --kubelet-client-key={{ k8s_work_dir }}/ssl/kube-apiserver-key.pem \
-  --service-account-key-file={{ k8s_work_dir }}/ssl/ca-key.pem \
-  --service-account-signing-key-file={{ k8s_work_dir }}/ssl/ca-key.pem  \
+  --tls-cert-file={{ kubernetes_work_dir }}/ssl/kube-apiserver.pem  \
+  --tls-private-key-file={{ kubernetes_work_dir }}/ssl/kube-apiserver-key.pem \
+  --client-ca-file={{ kubernetes_work_dir }}/ssl/ca.pem \
+  --kubelet-client-certificate={{ kubernetes_work_dir }}/ssl/kube-apiserver.pem \
+  --kubelet-client-key={{ kubernetes_work_dir }}/ssl/kube-apiserver-key.pem \
+  --service-account-key-file={{ kubernetes_work_dir }}/ssl/ca-key.pem \
+  --service-account-signing-key-file={{ kubernetes_work_dir }}/ssl/ca-key.pem  \
   --service-account-issuer=api \
   --etcd-cafile={{ etcd_work_dir }}/ssl/ca.pem \
   --etcd-certfile={{ etcd_work_dir }}/ssl/etcd.pem \

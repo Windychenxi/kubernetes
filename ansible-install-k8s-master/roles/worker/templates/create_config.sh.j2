@@ -1,0 +1,30 @@
+#!/bin/bash
+
+cd {{ kubernetes_work_dir }}/ssl/
+BOOTSTRAP_TOKEN=$(awk -F ',' '{print $1}' {{ kubernetes_work_dir }}/ssl/token.csv)
+kubectl config set-cluster kubernetes --certificate-authority=ca.pem --embed-certs=true --server=https://{{ vip }}:6443 --kubeconfig=kubelet-bootstrap.kubeconfig
+kubectl config set-credentials kubelet-bootstrap --token=${BOOTSTRAP_TOKEN} --kubeconfig=kubelet-bootstrap.kubeconfig
+kubectl config set-context default --cluster=kubernetes --user=kubelet-bootstrap --kubeconfig=kubelet-bootstrap.kubeconfig
+kubectl config use-context default --kubeconfig=kubelet-bootstrap.kubeconfig
+kubectl create clusterrolebinding cluster-system-anonymous --clusterrole=cluster-admin --user=kubelet-bootstrap
+kubectl create clusterrolebinding kubelet-bootstrap --clusterrole=system:node-bootstrapper --user=kubelet-bootstrap --kubeconfig=kubelet-bootstrap.kubeconfig
+mv kubelet-bootstrap.kubeconfig ../cfg/
+kubectl config set-cluster kubernetes --certificate-authority=ca.pem --embed-certs=true --server=https://{{ vip }}:6443 --kubeconfig=kube-proxy.kubeconfig
+kubectl config set-credentials kube-proxy --client-certificate=kube-proxy.pem --client-key=kube-proxy-key.pem --embed-certs=true --kubeconfig=kube-proxy.kubeconfig
+kubectl config set-context default --cluster=kubernetes --user=kube-proxy --kubeconfig=kube-proxy.kubeconfig
+kubectl config use-context default --kubeconfig=kube-proxy.kubeconfig
+mv kube-proxy.kubeconfig ../cfg/
+kubectl config set-cluster kubernetes --certificate-authority=ca.pem --embed-certs=true --server=https://{{ vip }}:6443 --kubeconfig=kube.config
+kubectl config set-credentials admin --client-certificate=admin.pem --client-key=admin-key.pem --embed-certs=true --kubeconfig=kube.config
+kubectl config set-context kubernetes --cluster=kubernetes --user=admin --kubeconfig=kube.config
+kubectl config use-context kubernetes --kubeconfig=kube.config
+
+kubectl create clusterrolebinding kube-apiserver:kubelet-apis --clusterrole=system:kubelet-api-admin --user=kubernetes --kubeconfig=kube.config
+if [ $? -eq 0 ]; then
+  echo "success"
+else
+  echo "retrying..."
+  kubectl create clusterrolebinding kube-apiserver:kubelet-apis --clusterrole=system:kubelet-api-admin --user=kubernetes --kubeconfig=kube.config
+fi
+
+mv kube.config ~/.kube/config

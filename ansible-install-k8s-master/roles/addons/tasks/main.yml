@@ -1,0 +1,92 @@
+---
+# tasks file for addons
+
+#---------------------------------- 部署 Calico | CoreDNS -------------------------------------
+# 单节点应用即可
+- name: Calico 创建 calico.yaml 配置文件
+  when: inventory_hostname in groups['mainWorker']
+  template:
+    src: "{{ item }}"
+    dest: "{{ kubernetes_work_dir }}/{{ item.split('.j2')[0] }}"
+  with_items:
+    - calico.yaml.j2
+    - coredns.yaml.j2
+
+- name: Calico 应用配置文件
+  when: inventory_hostname in groups['mainWorker']
+  shell: |
+    cd {{ kubernetes_work_dir }}  \
+    && kubectl apply -f calico.yaml \
+    && kubectl apply -f coredns.yaml
+
+#---------------------------------- 查看集群状态 -------------------------------------
+- name: 获取 node 节点信息
+  shell: kubectl get nodes
+  register: nodes_info
+
+- name: 获取 pods 信息
+  shell: kubectl get pods --all-namespaces
+  register: pods_info
+
+- name: 获取 csr 信息
+  shell: kubectl get csr
+  register: csr_info
+
+- name: 获取集群信息
+  shell: kubectl cluster-info
+  register: kube_cluster_info
+
+- name: 获取集群组件状态
+  shell: kubectl get componentstatuses
+  register: kube_component_status
+
+- name: 获取命名空间中的资源对象
+  shell: kubectl get all --all-namespaces
+  register: kube_all_namespaces
+
+- name: 查看(node | pods | csr | cluster | component | all)
+  debug:
+    msg:
+      - "{{ nodes_info.stdout_lines }}"
+      - "{{ pods_info.stdout_lines }}"
+      - "{{ csr_info.stdout_lines }}"
+      - "{{ kube_cluster_info.stdout_lines }}"
+      - "{{ nodes_info.stdout_lines }}"
+      - "{{ kube_component_status.stdout_lines }}"
+      - "{{ kube_all_namespaces.stdout_lines }}"
+
+#---------------------------------- 部署 dashboard -------------------------------------
+
+- name: 部署 dashboard
+  copy:
+    src: "{{ item }}"
+    dest: "{{ kubernetes_work_dir }}"
+  with_items:
+    - dashboard-admin-user.yaml
+    - dashboard-ClusterRoleBinding.yaml
+    - recommended.yaml
+
+- name: 创建 Dashboard 管理员令牌
+  when: inventory_hostname in groups['mainWorker']
+  shell: |
+    cd {{ kubernetes_work_dir }}  \
+    && kubectl apply -f recommended.yaml  \
+    && kubectl apply -f dashboard-admin-user.yaml  \
+    && kubectl apply -f dashboard-ClusterRoleBinding.yaml
+
+- name: 获取 Dashboard 管理员令牌
+  ignore_errors: yes
+  when: inventory_hostname in groups['mainWorker']
+  shell: |
+    web='https://NodeIP:30001'  \
+    && token=$(kubectl describe secrets -n kubernetes-dashboard \
+    && $(kubectl get secret -n kubernetes-dashboard | awk '/dashboard-admin/{print $1}') |awk '/^token/{print $2}') \
+    && echo "访问地址--->$web"  \
+    && echo "令牌内容--->$token"
+  register: ui
+
+- name: Kubernetes Dashboard登录信息
+  when: inventory_hostname in groups['mainWorker']
+  debug: var=ui.stdout_lines
+
+

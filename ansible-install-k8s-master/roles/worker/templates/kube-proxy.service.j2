@@ -6,7 +6,7 @@ After=network.target
 [Service]
 WorkingDirectory=/var/lib/kube-proxy
 ExecStart=/usr/local/bin/kube-proxy \
-  --config={{ k8s_work_dir }}/kube-proxy.yaml \
+  --config={{ kubernetes_work_dir }}/cfg/kube-proxy.yaml \
   --alsologtostderr=true \
   --logtostderr=false \
   --log-dir=/var/log/kubernetes\kube-proxy \

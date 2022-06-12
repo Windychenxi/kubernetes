@@ -1,0 +1,50 @@
+---
+# tasks file for containerd
+
+# -------------------------------- 安装 runc --------------------------------
+- name: 替换掉原软件包中的 runc
+  copy:
+    src: "{{ item }}"
+    dest: /usr/local/sbin/runc
+    mode: 700
+  with_fileglob:
+    - "{{ software_dir }}/runc.amd64"
+
+- name: 获取 runc 版本信息
+  shell: runc -v
+  register: runc_info
+
+- name: 查看 runc 版本信息
+  debug:
+    msg: "{{ runc_info.stdout_lines}}"
+
+# --------------------------- 安装 containerd --------------------------------
+
+- name: 分发并解压软件包
+  unarchive:
+    src: "{{ item }}"
+    dest:  /
+  with_fileglob:
+    - "{{ software_dir }}/cri-containerd*.tar.gz"
+
+- name: 生成配置文件存放目录
+  file:
+    path: /etc/containerd
+    state: directory
+
+# - name: 生成配置文件并修改
+#   shell: |
+#     containerd config default >/etc/containerd/config.toml
+#     sed -i 's@systemd_cgroup = false@systemd_cgroup = true@' /etc/containerd/config.toml
+#     sed -i 's@k8s.gcr.io/pause:3.6@registry.aliyuncs.com/google_containers/pause:3.6@' /etc/containerd/config.toml
+
+- name: 分发 config.toml
+  copy:
+    src: config.toml
+    dest: /etc/containerd/config.toml
+
+- name: 启动服务
+  service:
+    name: containerd
+    state: restarted
+    enabled: yes

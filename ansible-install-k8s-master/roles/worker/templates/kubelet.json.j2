@@ -3,7 +3,7 @@
   "apiVersion": "kubelet.config.k8s.io/v1beta1",
   "authentication": {
     "x509": {
-      "clientCAFile": "{{ k8s_work_dir }}/ssl/ca.pem"
+      "clientCAFile": "{{ kubernetes_work_dir }}/ssl/ca.pem"
     },
     "webhook": {
       "enabled": true,

@@ -1,0 +1,28 @@
+#!/bin/bash
+
+cd {{ kubernetes_work_dir }}/ssl/
+kubectl config set-cluster kubernetes --certificate-authority=ca.pem --embed-certs=true --server=https://{{ vip }}:6443 --kubeconfig=kube.config
+kubectl config set-credentials admin --client-certificate=admin.pem --client-key=admin-key.pem --embed-certs=true --kubeconfig=kube.config
+kubectl config set-context kubernetes --cluster=kubernetes --user=admin --kubeconfig=kube.config
+kubectl config use-context kubernetes --kubeconfig=kube.config
+
+kubectl create clusterrolebinding kube-apiserver:kubelet-apis --clusterrole=system:kubelet-api-admin --user=kubernetes --kubeconfig=kube.config
+if [ $? -eq 0 ]; then
+  echo "success"
+else
+# 返回 EOF 再次尝试
+  echo "retrying..."
+  kubectl create clusterrolebinding kube-apiserver:kubelet-apis --clusterrole=system:kubelet-api-admin --user=kubernetes --kubeconfig=kube.config
+fi
+mv kube.config ~/.kube/config
+
+kubectl config set-cluster kubernetes --certificate-authority=ca.pem --embed-certs=true --server=https://{{ vip }}:6443 --kubeconfig=kube-controller-manager.kubeconfig
+kubectl config set-credentials system:kube-controller-manager --client-certificate=kube-controller-manager.pem --client-key=kube-controller-manager-key.pem --embed-certs=true --kubeconfig=kube-controller-manager.kubeconfig
+kubectl config set-context system:kube-controller-manager --cluster=kubernetes --user=system:kube-controller-manager --kubeconfig=kube-controller-manager.kubeconfig
+kubectl config use-context system:kube-controller-manager --kubeconfig=kube-controller-manager.kubeconfig
+mv kube-controller-manager.kubeconfig ../cfg/
+kubectl config set-cluster kubernetes --certificate-authority=ca.pem --embed-certs=true --server=https://{{ vip }}:6443 --kubeconfig=kube-scheduler.kubeconfig
+kubectl config set-credentials system:kube-scheduler --client-certificate=kube-scheduler.pem --client-key=kube-scheduler-key.pem --embed-certs=true --kubeconfig=kube-scheduler.kubeconfig
+kubectl config set-context system:kube-scheduler --cluster=kubernetes --user=system:kube-scheduler --kubeconfig=kube-scheduler.kubeconfig
+kubectl config use-context system:kube-scheduler --kubeconfig=kube-scheduler.kubeconfig
+mv kube-scheduler.kubeconfig ../cfg/

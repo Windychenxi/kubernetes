@@ -1,10 +1,10 @@
 ---
 # tasks file for kubernetes
 
-#----------------------------------准备 kubernetes 环境 --- k8s ----------------------------------
+#----------------------------------准备 kubernetes 环境 -------------------------------------
 - name: 创建工作目录
   file:
-    path: "{{ k8s_work_dir }}/{{ item }}"
+    path: "{{ kubernetes_work_dir }}/{{ item }}"
     state: directory
   with_items: 
     - bin
@@ -13,135 +13,87 @@
 
 - name: 创建日志目录
   file:
-    path: /var/log/kubernetes
+    path: "/var/log/kubernetes{{ item }}"
     state: directory
+  with_items:
+    - kube-apiserver
+    - kube-controller-manager
+    - kube-scheduler
 
-- name: 分发并解压软件包
+- name: 分发并解压 kubernetes 软件包
   unarchive:
     src: "{{ item }}"
     dest:  "{{ tmp_dir }}"
   with_fileglob:
-    - binary_pkg/kubernetes*.tar.gz
+    - "{{ software_dir }}/kubernetes*.tar.gz"
 
-- name: 移动二进制文件 0
+- name: 移动 kubernetes 二进制文件
   when: inventory_hostname in groups['master']
-  shell: cp -fr {{ tmp_dir }}/kubernetes/server/bin/{kube-apiserver,kube-controller-manager,kube-scheduler,kubectl,kubelet,kube-proxy} /usr/local/bin/
-
-- name: 移动二进制文件 1
-  when: inventory_hostname in groups['worker']
-  shell: cp -fr {{ tmp_dir }}/kubernetes/server/bin/{kubectl,kubelet,kube-proxy} /usr/local/bin/
-
-
-
-#----------------------------------部署 kube-apiserver --- master ----------------------------------
-
-- name: 分发 kube-apiserver.conf 配置文件
-  when: inventory_hostname in groups['master']
-  template:
-    src: kube-apiserver.conf.j2
-    dest: "{{ k8s_work_dir }}/cfg/kube-apiserver.conf"
-
-- name: 分发 kube-apiserver.service 服务管理配置文件
-  when: inventory_hostname in groups['master']
-  template:
-    src: kube-apiserver.service.j2
-    dest: /etc/systemd/system/kube-apiserver.service
-    mode: 700
-
-- name: 移动证书及 token 到 kubernetes/ssl 目录
-  when: inventory_hostname in groups['master']
-  shell: cd {{ tmp_dir }}/ && cp ca*.pem kube-apiserver*.pem token.csv {{ k8s_work_dir }}/ssl
-
-- name: 启动 daemon-reload 服务
-  when: inventory_hostname in groups['master']
-  service:
-    name: daemon-reload
-
-- name: 启动 kube-apiserver 服务
-  when: inventory_hostname in groups['master']
-  service:
-    name: kube-apiserver
-    state: started
-    enabled: yes
-
-- name: 生成验证 kube-apiserver 服务脚本
-  when: inventory_hostname in groups['master']
-  template:
-    src: check_kube_apiserver.sh.j2
-    dest: "{{ k8s_work_dir }}/bin/check_kube_apiserver.sh"
-    mode: 700
-
-- name: 执行验证 kube-apiserver 服务脚本
-  when: inventory_hostname in groups['master']
-  shell: cd {{ k8s_work_dir }}/bin/ && sh check_kube_apiserver.sh
-  register: kube_apiserver_status
-
-- name: 查看验证服务信息
-  when: inventory_hostname in groups['master']
-  debug:
-    msg: "{{ kube_apiserver_status.stdout_lines }}"
-
-#----------------------------------部署 kubectl --- k8s ----------------------------------
-- name: 移动证书到 kubernetes/ssl 目录
-  shell: cd {{ tmp_dir }}/ && cp admin*.pem  {{ k8s_work_dir }}/ssl
-
-- name: mainMaster 生成 kube.config 配置文件生成脚本
-  when: inventory_hostname in groups['mainMaster']
-  template:
-    src: create_kube_config.sh.j2
-    dest: "{{ k8s_work_dir }}/ssl/create_kube_config.sh"
-    mode: 700
-
-- name: mainMaster 执行生成 kube.config 配置文件生成脚本
-  when: inventory_hostname in groups['mainMaster']
   shell: |
-    cd {{ k8s_work_dir }}/ssl
-    sh create_kube_config.sh
-    
-- name: 创建 kube.config 存放目录
+    cp -fr {{ tmp_dir }}/kubernetes/server/bin/{kube-apiserver,kube-controller-manager,kube-scheduler,kubectl} /usr/local/bin/
+
+#---------------------------------- 部署 kubernetes ----------------------------------
+
+- name: 分发 config 生成脚本
+  template:
+    src: create_config.sh.j2
+    dest: "{{ kubernetes_work_dir }}/ssl/create_config.sh"
+    mode: 700
+
+- name: 分发配置文件
+  template:
+    src: "{{ item }}"
+    dest: "{{ kubernetes_work_dir }}/cfg/{{ item.split('.j2')[0] }}"
+  with_items:
+    - kube-apiserver.conf.j2
+    - kube-controller-manager.conf.j2
+    - kube-scheduler.conf.j2
+
+- name: 分发 service 文件
+  template:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item.split('.j2')[0] }}"
+    mode: 700
+  with_items:
+    - kube-apiserver.service.j2
+    - kube-controller-manager.service.j2
+    - kube-scheduler.service.j2
+
+- name: 将 kubernetes 证书从缓存目录中拷贝至工作目录
+  shell: |
+    cd {{ tmp_dir }}/ \
+    && cp {{ item }} {{ kubernetes_work_dir }}/ssl
+  with_items:
+    - ca*.pem
+    - kube-apiserver*.pem
+    - token.csv
+    - admin*.pem
+    - kube-controller-manager*.pem
+    - kube-scheduler*.pem
+
+- name: 创建 config 文件存放目录
   file:
     path: ~/.kube
     state: directory
 
-- name: mainMaster 生成分发 kube.config 配置文件脚本
-  when: inventory_hostname in groups['mainMaster']
-  template:
-    src: copy_kube_config.sh.j2
-    dest: "{{ k8s_work_dir }}/ssl/copy_kube_config.sh"
-    mode: 700
-
-- name: mainMaster 执行分发 kube.config 配置文件脚本
-  when: inventory_hostname in groups['mainMaster']
+- name: 生成 config 文件(kube.config | kube-controller-manager.kubeconfig | kube-scheduler.kubeconfig)
   shell: |
-    cd {{ k8s_work_dir }}/ssl/
-    mv kube.config config
-    sh copy_kube_config.sh
+    cd {{ kubernetes_work_dir }}/ssl/ \
+    && sh create_config.sh
 
 - name: 导出 kube config 路径变量
   shell: export KUBECONFIG=$HOME/.kube/config
 
-- name: 验证集群信息
-  shell: kubectl cluster-info
-  register: kube_cluster_info
-
-- name: 查看集群信息
-  debug:
-    msg: "{{ kube_cluster_info.stdout_lines }}"
-
-- name: 验证集群组件状态
-  shell: kubectl get componentstatuses
-  register: kube_component_status
-
-- name: 查看集群组件状态
-  debug: "{{ kube_cluster_info.stdout_lines }}"
-
-- name: 验证命名空间中的资源对象
-  shell: kubectl get all --all-namespaces
-  register: kube_all_namespaces
-
-- name: 查看命名空间中的资源对象
-  debug:
-    msg: "{{ kube_all_namespaces.stdout_lines }}"
+- name: 启动 kubernetes 服务
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+    enabled: yes
+    daemon_reload: yes
+  with_items:
+    - kube-apiserver
+    - kube-controller-manager
+    - kube-scheduler
 
 # - name: 配置 kubectl 命令补全（可选）
 #   shell: |
@@ -149,179 +101,6 @@
 #     source /usr/share/bash-completion/bash_completion
 #     source <(kubectl completion bash)
 #     kubectl completion bash > ~/.kube/completion.bash.inc
-#     source '/root/.kube/completion.bash.inc'  
+#     source '/root/.kube/completion.bash.inc'
 #     source $HOME/.bash_profile
-
-
-#------------------------ 部署kube-controller-manager --- master -------------------------
-- name: 移动证书到 kubernetes/ssl 目录
-  when: inventory_hostname in groups['master']
-  shell: cd {{ tmp_dir }}/ && cp kube-controller-manager*.pem {{ k8s_work_dir }}/ssl
-
-- name: 生成创建 kube-controller-manager.kubeconfig 配置文件脚本
-  when: inventory_hostname in groups['master']
-  template:
-    src: create_kube_controller_manager_kubeconfig.sh.j2
-    dest: "{{ k8s_work_dir }}/ssl/create_kube_controller_manager_kubeconfig.sh"
-    mode: 700
-
-- name: 执行 kube-controller-manager.kubeconfig 创建脚本， 创建 kube-controller-manager.kubeconfig 配置文件
-  when: inventory_hostname in groups['master']
-  shell: cd {{ k8s_work_dir }}/ssl && sh create_kube_controller_manager_kubeconfig.sh && mv kube-controller-manager.kubeconfig ../
-
-- name: 创建 kube-controller-manager.conf 配置文件
-  when: inventory_hostname in groups['master']
-  template:
-    src: kube-controller-manager.conf.j2
-    dest: "{{ k8s_work_dir }}/cfg/kube-controller-manager.conf"
-
-- name: 创建服务启动文件 kube-controller-manager.service
-  when: inventory_hostname in groups['master']
-  template:
-    src: kube-controller-manager.service.j2
-    dest: "/etc/systemd/system/kube-controller-manager.service"
-    mode: 700
-
-- name: 获取证书信息
-  when: inventory_hostname in groups['master']
-  shell: openssl x509 -in {{ k8s_work_dir }}/ssl/kube-controller-manager.pem -noout -text
-  register: kube_controller_manager_cert_info
-
-- name: 查看证书信息
-  when: inventory_hostname in groups['master']
-  debug:
-    msg: "{{ kube_controller_manager_cert_info.stdout_lines }}"
-
-- name: 启动 daemon-reload 服务
-  when: inventory_hostname in groups['master']
-  service:
-    name: daemon-reload
-
-- name: 启动 kube-controller-manager 服务
-  when: inventory_hostname in groups['master']
-  service:
-    name: kube-controller-manager
-    state: started
-    enabled: yes
-
-#----------------------------------部署 kube-scheduler --- master ----------------------------------
-- name: 移动证书到 kubernetes/ssl 目录
-  when: inventory_hostname in groups['master']
-  shell: cd {{ tmp_dir }}/ && cp kube-scheduler*.pem {{ k8s_work_dir }}/ssl
-
-- name: 生成创建 kube-scheduler.kubeconfig 配置文件脚本
-  when: inventory_hostname in groups['master']
-  template:
-    src: create_kube_scheduler_kubeconfig.sh.j2
-    dest: "{{ k8s_work_dir }}/ssl/create_kube_scheduler_kubeconfig.sh"
-    mode: 700
-
-- name: 执行 kube-scheduler.kubeconfig 创建脚本， 创建 kube-scheduler.kubeconfig 配置文件
-  when: inventory_hostname in groups['master']
-  shell: cd {{ k8s_work_dir }}/ssl && sh create_kube_scheduler_kubeconfig.sh && mv kube-scheduler.kubeconfig ../
-
-- name: 创建 kube-scheduler.conf 配置文件
-  when: inventory_hostname in groups['master']
-  template:
-    src: kube-scheduler.conf.j2
-    dest: "{{ k8s_work_dir }}/cfg/kube-scheduler.conf"
-
-- name: 创建服务启动文件 kube-scheduler.service
-  when: inventory_hostname in groups['master']
-  template:
-    src: kube-scheduler.service.j2
-    dest: "/etc/systemd/system/kube-scheduler.service"
-    mode: 700
-
-- name: 启动 daemon-reload 服务
-  when: inventory_hostname in groups['master']
-  service:
-    name: daemon-reload
-
-- name: 启动 kube-scheduler 服务
-  when: inventory_hostname in groups['master']
-  service:
-    name: kube-scheduler
-    state: started
-    enabled: yes
-
-- name: 获取服务状态
-  when: inventory_hostname in groups['master']
-  shell: kubectl get componentstatuses
-  register: componentstatuses
-
-- name: 查看服务状态
-  when: inventory_hostname in groups['master']
-  debug: 
-    msg: "{{ componentstatuses.stdout_lines }}"
-
-#----------------------------------部署 dashboard ----------------------------------
-- name: 分发 recommended.yaml 文件
-  when: inventory_hostname in groups['mainMaster']
-  copy:
-    src: recommended.yaml
-    dest: "{{ k8s_work_dir }}"
-
-- name: 创建 pod
-  when: inventory_hostname in groups['mainMaster']
-  shell: cd {{ k8s_work_dir }} && kubectl apply -f recommended.yaml
-
-- name: 获取创建信息
-  when: inventory_hostname in groups['mainMaster']
-  shell: kubectl get pods --all-namespaces
-  register: dashboard_info
-
-- name: 查看创建信息
-  when: inventory_hostname in groups['mainMaster']
-  debug:
-    msg: "{{ dashboard_info.stdout_lines }}"
-
-# dashboard 服务的 namespace 是 kubernetes-dashboard, 但是该服务的类型是 ClusterIP, 不便于通过浏览器访问, 因此需要改成 NodePort 类型
-- name: 删除现有的dashboard服务
-  when: inventory_hostname in groups['mainMaster']
-  shell: kubectl delete service kubernetes-dashboard --namespace=kubernetes-dashboard
-
-- name: 分发 dashboard-svc.yaml 文件
-  when: inventory_hostname in groups['mainMaster']
-  copy:
-    src: dashboard-svc.yaml
-    dest: "{{ k8s_work_dir }}"
-
-- name: 创建 pod
-  when: inventory_hostname in groups['mainMaster']
-  shell: cd {{ k8s_work_dir }} && kubectl apply -f dashboard-svc.yaml
-
-- name: 再次查看服务
-  when: inventory_hostname in groups['mainMaster']
-  shell: kubectl get svc --all-namespaces
-
-- name: 分发 dashboard-svc-account.yaml 文件
-  when: inventory_hostname in groups['mainMaster']
-  copy:
-    src: dashboard-svc-account.yaml
-    dest: "{{ k8s_work_dir }}"
-
-- name: 创建 kubernetes-dashboard 管理员角色
-  when: inventory_hostname in groups['mainMaster']
-  shell: cd {{ k8s_work_dir }} && kubectl apply -f dashboard-svc-account.yaml
-
-- name: 创建 secret
-  when: inventory_hostname in groups['mainMaster']
-  shell: kubectl get secret -n kube-system |grep admin|awk '{print $1}'
-  register: secret
-
-- name: 查看 secret
-  when: inventory_hostname in groups['mainMaster']
-  debug:
-    msg: "{{ secret.stdout }}"
-
-- name: 创建 token
-  when: inventory_hostname in groups['mainMaster']
-  shell: kubectl describe secret {{ secret.stdout }} -n kube-system|grep '^token'|awk '{print $2}'
-  register: token
-
-- name: 查看 token
-  when: inventory_hostname in groups['mainMaster']
-  debug:
-    msg: "{{ token.stdout }}"
 

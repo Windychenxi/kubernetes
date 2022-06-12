@@ -26,7 +26,7 @@
     src: "{{ item }}"
     dest: "{{ tmp_dir }}"
   with_fileglob:
-    - binary_pkg/etcd-v*.tar.gz
+    - "{{software_dir}}/etcd-v*.tar.gz"
 
 - name: 移动 etcd 二进制文件
   shell: cp -fr {{ tmp_dir }}/etcd-v*/{etcd,etcdctl,etcdutl} /usr/local/bin/

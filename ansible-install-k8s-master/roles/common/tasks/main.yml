@@ -75,16 +75,16 @@
 
 - name: crontab 创建 crontab 目录
   file: 
-    dest: "{{ k8s_work_dir }}/crontab/"
+    dest: "{{ kubernetes_work_dir }}/crontab/"
     state: directory
 
 - name: crontab 分发同步时间任务
   copy:
     src: crontab.cron
-    dest: "{{ k8s_work_dir }}/crontab/crontab.cron"
+    dest: "{{ kubernetes_work_dir }}/crontab/crontab.cron"
 
 - name: crontab 时间同步任务生效
-  shell: crontab {{ k8s_work_dir }}/crontab/crontab.cron
+  shell: crontab {{ kubernetes_work_dir }}/crontab/crontab.cron
 
 # --------------------------- Linux 内核升级 --------------------------------------
 
@@ -121,14 +121,13 @@
     src: "{{ item }}"
     dest: "{{ tmp_dir }}/{{ item.split('/')[-1] }}"
   with_fileglob:
-    - binary_pkg/kernel-ml*.rpm
+    - "{{ software_dir }}/kernel-ml*.rpm"
 
 - name: 安装 kernel-ml
   yum:
     name: "{{ tmp_dir }}/{{ item.split('/')[-1] }}"
-    # name: "{{ tmp_dir }}/{{ lookup('fileglob', ['/binary_pkg/kernel-ml*.rpm'])[0] }}.split('/')[-1]"
     state: present
-  with_fileglob: binary_pkg/kernel-ml*.rpm
+  with_fileglob: "{{ software_dir }}/kernel-ml*.rpm"
 
 - name: 设置 grub2，让 Linux 使用此内核启动
   shell:
@@ -259,7 +258,7 @@
 - name: 分发 expect 二进制包
   when: inventory_hostname in groups['mainMaster']
   unarchive:
-    src: binary_pkg/expect.tar.gz
+    src: "{{ software_dir }}/expect.tar.gz"
     dest: "{{ tmp_dir }}"
 
 - name: 安装 expect

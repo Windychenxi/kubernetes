@@ -1,7 +1,9 @@
 # 安装目录
-k8s_work_dir: '/etc/kubernetes'
+kubernetes_work_dir: '/etc/kubernetes'
 etcd_work_dir: '/etc/etcd'
 tmp_dir: '/tmp/k8s'
+software_dir: '/root/binary_package'
+
 
 # 高可用，如果部署单Master，该项忽略
 vip: '192.168.10.100'

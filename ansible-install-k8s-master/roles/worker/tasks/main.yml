@@ -1,261 +1,114 @@
 ---
 # tasks file for worker
 
-#- name: 创建 ssl 目录
-#  when: inventory_hostname in groups['worker']
-#  file:
-#    path: /etc/kubernetes/ssl
-#    state: directory
-
-# --------------------------- 安装 containerd --------------------------------
-
-- name: 分发并解压软件包
-  unarchive:
-    src: "{{ item }}"
-    dest:  /
-  with_fileglob:
-    - binary_pkg/cri-containerd*.tar.gz
-
-- name: 生成配置文件存放目录
+#----------------------------------准备 kubernetes 环境 -------------------------------------
+- name: 创建工作目录
   file:
-    path: /etc/containerd
-    state: directory
-
-# - name: 生成配置文件并修改
-#   shell: |
-#     containerd config default >/etc/containerd/config.toml
-#     sed -i 's@systemd_cgroup = false@systemd_cgroup = true@' /etc/containerd/config.toml
-#     sed -i 's@k8s.gcr.io/pause:3.6@registry.aliyuncs.com/google_containers/pause:3.6@' /etc/containerd/config.toml
-
-- name: 分发 config.toml
-  copy: 
-    src: config.toml
-    dest: /etc/containerd/config.toml
-
-
-# -------------------------------- 安装 runc --------------------------------
-- name: 替换掉原软件包中的 runc
-  copy:
-    src: "{{ item }}"
-    dest: /usr/local/sbin/runc
-  with_fileglob:
-    - binary_pkg/runc.amd64
-
-- name: 获取 runc 版本信息
-  shell: runc -v
-  register: runc_info
-
-- name: 查看 runc 版本信息
-  debug:
-    msg: "{{ runc_info.stdout_lines}}"
-
-
-- name: 启动 containerd 服务
-  service:
-    name: containerd
-    state: started
-    enabled: yes
-
-#----------------------------------部署 kubelet -------------------------------------
-- name: 移动 CA证书 | token.csv 到 kubernetes/ssl 目录
-  shell: cd {{ tmp_dir }}/ && cp ca*.pem token.csv {{ k8s_work_dir }}/ssl
-
-- name: 生成创建 kubelet-bootstrap.kubeconfig 配置文件脚本
-  template:
-    src: create_kubelet_bootstrap_kubeconfig.sh.j2
-    dest: "{{ k8s_work_dir }}/ssl/create_kubelet_bootstrap_kubeconfig.sh"
-    mode: 700
-
-- name: 执行创建 kubelet-bootstrap.kubeconfig 配置文件脚本
-  shell: |
-    cd {{ k8s_work_dir }}/ssl
-    sh create_kubelet_bootstrap_kubeconfig.sh
-
-- name: 获取角色绑定信息 cluster-system-anonymous
-  shell: kubectl describe clusterrolebinding cluster-system-anonymous
-  register: cluster_system_anonymous_describe
-
-- name: 获取角色绑定信息 kubelet-bootstrap
-  shell: kubectl describe clusterrolebinding kubelet-bootstrap
-  register: kubelet_bootstrap_describe
-
-- name: 查看角色绑定信息
-  debug:
-    msg:
-      - "{{ cluster_system_anonymous_describe.stdout_lines }}"
-      - "{{ kubelet_bootstrap_describe.stdout_lines }}"
-
-- name: 创建 kubelet.json 配置文件
-  template:
-    src: kubelet.json.j2
-    dest: "{{ k8s_work_dir }}/kubelet.json"
-
-- name: 创建 kubelet.service 服务启动管理文件
-  template:
-    src: kubelet.service.j2
-    dest: /etc/systemd/system/kubelet.service
-    mode: 700
-
-- name: 创建 kubelet , kubernetes 目录
-  file:
-    path: "{{ item }}"
+    path: "{{ kubernetes_work_dir }}/{{ item }}"
     state: directory
   with_items:
-    - /var/lib/kubelet
-    - /var/log/kubernetes
+    - bin
+    - cfg
+    - ssl
 
-- name: 启动 daemon-reload 服务
-  service:
-    name: daemon-reload
-
-- name: 启动 kubelet 服务
-  service:
-    name: kubelet
-    state: started
-    enabled: yes
-  
-- name: 获取节点信息
-  shell: kubectl get nodes
-  register: nodes_info
-
-- name: 获取节点证书
-  shell: kubectl get csr
-  register: csr_info
-
-- name: 查看节点信息及证书
-  debug:
-    msg: 
-      - "{{ nodes_info.stdout_lines }}"
-      - "{{ csr_info.stdout_lines }}"
-
-
-#----------------------------------部署 kube-proxy -------------------------------------
-
-- name: 创建工作目录 WorkingDirectory
+- name: 创建 kubelet 工作目录
   file:
-    path: /var/lib/kube-proxy
+    path: "/var/lib/{{ item }}"
+    state: directory
+  with_items:
+    - kubelet
+    - kube-proxy
+
+- name: 创建日志目录
+  file:
+    path: "/var/log/kubernetes{{ item }}"
+    state: directory
+  with_items:
+    - kubelet
+    - kube-proxy
+
+- name: 分发并解压 kubernetes 软件包
+  unarchive:
+    src: "{{ item }}"
+    dest:  "{{ tmp_dir }}"
+  with_fileglob:
+    - "{{ software_dir }}/kubernetes*.tar.gz"
+
+- name: 移动 kubernetes 二进制文件
+  shell: cp -fr {{ tmp_dir }}/kubernetes/server/bin/{kubectl,kubelet,kube-proxy} /usr/local/bin/
+
+## -------------------------------- 安装 runc --------------------------------
+#- name: 替换掉原软件包中的 runc
+#  copy:
+#    src: "{{ item }}"
+#    dest: /usr/local/sbin/runc
+#    mode: 700
+#  with_fileglob:
+#    - "{{ software_dir }}/runc.amd64"
+#
+#- name: 获取 runc 版本信息
+#  shell: runc -v
+#  register: runc_info
+#
+#- name: 查看 runc 版本信息
+#  debug:
+#    msg: "{{ runc_info.stdout_lines}}"
+
+#----------------------------------部署 kubernetes -------------------------------------
+
+- name: 分发 config 生成脚本
+  template:
+    src: create_config.sh.j2
+    dest: "{{ kubernetes_work_dir }}/ssl/create_config.sh"
+    mode: 700
+
+- name: 分发配置文件
+  template:
+    src: "{{ item }}"
+    dest: "{{ kubernetes_work_dir }}/cfg/{{ item.split('.j2')[0] }}"
+  with_items:
+    - kubelet.json.j2
+    - kube-proxy.yaml.j2
+
+
+- name: 分发 service 文件
+  template:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item.split('.j2')[0] }}"
+    mode: 700
+  with_items:
+    - kubelet.service.j2
+    - kube-proxy.service.j2
+
+- name: 将 kubernetes 证书从缓存目录中拷贝至工作目录
+  shell: |
+    cd {{ tmp_dir }}/ \
+    && cp {{ item }} {{ kubernetes_work_dir }}/ssl
+  with_items:
+    - ca*.pem
+    - token.csv
+    - kube-proxy*.pem
+    - admin*.pem
+
+- name: 创建 config 文件存放目录
+  file:
+    path: ~/.kube
     state: directory
 
-- name: 移动证书到 kubernetes/ssl 目录
-  shell: cd {{ tmp_dir }}/ && cp kube-proxy*.pem {{ k8s_work_dir }}/ssl
-
-- name: 生成创建 kube-proxy.kubeconfig 配置文件脚本
-  template:
-    src: create_kube_proxy_kubeconfig.sh.j2
-    dest: "{{ k8s_work_dir }}/ssl/create_kube_proxy_kubeconfig.sh"
-    mode: 700
-
-- name: 执行创建 kube-proxy.kubeconfig 配置文件脚本
+- name: 生成 config 文件(kube.config | kube-proxy.kubeconfig)
   shell: |
-    cd {{ k8s_work_dir }}/ssl
-    sh create_kube_proxy_kubeconfig.sh
+    cd {{ kubernetes_work_dir }}/ssl/ \
+    && sh create_config.sh
 
-- name: 创建服务配置文件 kube-proxy.yaml
-  template:
-    src: kube-proxy.yaml.j2
-    dest: "{{ k8s_work_dir }}/kube-proxy.yaml"
+- name: 导出 kube config 路径变量
+  shell: export KUBECONFIG=$HOME/.kube/config
 
-- name: 创建 kube-proxy.service 服务启动管理文件
-  template:
-    src: kube-proxy.service.j2
-    dest: /etc/systemd/system/kube-proxy.service
-    mode: 700
-
-- name: 启动 daemon-reload 服务
-  service:
-    name: daemon-reload
-
-- name: 启动 kube-proxy 服务
-  service:
-    name: kube-proxy
-    state: started
+- name: 启动 kubernetes 服务
+  systemd:
+    name: "{{ item }}"
+    state: restarted
     enabled: yes
-  register: kube_proxy_status
-
-- name: 查看 kube-proxy 运行状态
-  debug:
-    msg: "{{ kube_proxy_status }}"
-
-#----------------------------------部署 Calico -------------------------------------
-# 单节点应用即可
-- name: Calico 创建 calico.yaml 配置文件
-  when: inventory_hostname in groups['mainWorker']
-  template:
-    src: calico.yaml.j2
-    dest: "{{ k8s_work_dir }}/calico.yaml"
-
-- name: Calico 应用配置文件
-  when: inventory_hostname in groups['mainWorker']
-  shell: |
-    cd {{ k8s_work_dir }} \
-    kubectl apply -f calico.yaml
-
-- name: Calico 获取验证应用结果
-  when: inventory_hostname in groups['mainWorker']
-  shell: kubectl get pods -A
-  register: pods_result
-
-- name: Calico 查看验证应用结果
-  when: inventory_hostname in groups['mainWorker']
-  debug:
-    msg: "{{ pods_result.stdout_lines }}"
-
-- name: Calico 获取节点状态
-  when: inventory_hostname in groups['mainWorker']
-  shell: kubectl get nodes
-  register: nodes_status
-
-- name: Calico 查看节点状态
-  when: inventory_hostname in groups['mainWorker']
-  debug:
-    msg: "{{ nodes_status.stdout_lines }}"
-
-#----------------------------------部署 CoreDNS -------------------------------------
-# 单节点应用即可
-- name: CoreDNS 创建 coredns.yaml 配置文件
-  when: inventory_hostname in groups['mainWorker']
-  template:
-    src: coredns.yaml.j2
-    dest: "{{ k8s_work_dir }}/coredns.yaml"
-
-- name: CoreDNS 应用配置文件
-  when: inventory_hostname in groups['mainWorker']
-  shell: |
-    cd {{ k8s_work_dir }} \
-    kubectl apply -f coredns.yaml
-
-- name: CoreDNS 获取 pods 信息
-  when: inventory_hostname in groups['mainWorker']
-  shell: kubectl get pods -A
-  register: pods_status
-
-- name: CoreDNS 查看 pods 信息
-  when: inventory_hostname in groups['mainWorker']
-  debug:
-    msg: "{{ pods_status }}"
-
-#----------------------------------部署 nginx 进行验证 -------------------------------------
-
-- name: nginx 分发 nginx.yaml 配置文件
-  copy:
-    src: nginx.yaml
-    dest: "{{ k8s_work_dir }}/nginx.yaml"
-
-- name: nginx 应用 nginx.yaml 配置文件
-  shell: |
-    cd {{ k8s_work_dir }} \
-    kubectl apply -f nginx.yaml
-
-- name: nginx 再次获取 pods 信息
-  shell: kubectl get pods -o wide
-  register: pods_info
-
-- name: nginx 获取所有运行的服务
-  shell: kubectl get all
-  register: all_info
-
-- name: nginx 查看 pods 状态
-  debug:
-    msg:
-      - "{{ pods_info.stdout_lines }}"
-      - "{{ all_info.stdout_lines }}"
+    daemon_reload: yes
+  with_items:
+    - kubelet
+    - kube-proxy

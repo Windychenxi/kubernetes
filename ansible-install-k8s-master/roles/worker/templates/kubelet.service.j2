@@ -7,10 +7,10 @@ Requires=containerd.service
 [Service]
 WorkingDirectory=/var/lib/kubelet
 ExecStart=/usr/local/bin/kubelet \
-  --bootstrap-kubeconfig={{ k8s_work_dir }}/kubelet-bootstrap.kubeconfig \
-  --cert-dir={{ k8s_work_dir }}/ssl \
-  --kubeconfig={{ k8s_work_dir }}/kubelet.kubeconfig \
-  --config={{ k8s_work_dir }}/kubelet.json \
+  --bootstrap-kubeconfig={{ kubernetes_work_dir }}/cfg/kubelet-bootstrap.kubeconfig \
+  --cert-dir={{ kubernetes_work_dir }}/ssl \
+  --kubeconfig={{ kubernetes_work_dir }}/cfg/kubelet.kubeconfig \
+  --config={{ kubernetes_work_dir }}/cfg/kubelet.json \
   --cni-bin-dir=/opt/cni/bin \
   --cni-conf-dir=/etc/cni/net.d \
   --container-runtime=remote \
