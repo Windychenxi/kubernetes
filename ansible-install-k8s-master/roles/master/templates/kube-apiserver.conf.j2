@@ -1,0 +1,38 @@
+{% set local_ip = inventory_hostname %}
+
+KUBE_APISERVER_OPTS="--enable-admission-plugins=NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota \
+  --anonymous-auth=false \
+  --bind-address={{ local_ip }} \
+  --secure-port=6443 \
+  --advertise-address={{ local_ip }} \
+  --insecure-port=0 \
+  --authorization-mode=Node,RBAC \
+  --runtime-config=api/all=true \
+  --enable-bootstrap-token-auth \
+  --service-cluster-ip-range={{ service_cluster_ip_range }} \
+  --token-auth-file={{ k8s_work_dir }}/ssl/token.csv \
+  --service-node-port-range={{ service_node_port_range }} \
+  --tls-cert-file={{ k8s_work_dir }}/ssl/kube-apiserver.pem  \
+  --tls-private-key-file={{ k8s_work_dir }}/ssl/kube-apiserver-key.pem \
+  --client-ca-file={{ k8s_work_dir }}/ssl/ca.pem \
+  --kubelet-client-certificate={{ k8s_work_dir }}/ssl/kube-apiserver.pem \
+  --kubelet-client-key={{ k8s_work_dir }}/ssl/kube-apiserver-key.pem \
+  --service-account-key-file={{ k8s_work_dir }}/ssl/ca-key.pem \
+  --service-account-signing-key-file={{ k8s_work_dir }}/ssl/ca-key.pem  \
+  --service-account-issuer=api \
+  --etcd-cafile={{ etcd_work_dir }}/ssl/ca.pem \
+  --etcd-certfile={{ etcd_work_dir }}/ssl/etcd.pem \
+  --etcd-keyfile={{ etcd_work_dir }}/ssl/etcd-key.pem \
+  --etcd-servers={% for ip in groups ['master'] %}{% if not loop.last %}https://{{ ip }}:2379,{% else %}https://{{ ip }}:2379 \{% endif %}{% endfor %}
+  --enable-swagger-ui=true \
+  --allow-privileged=true \
+  --apiserver-count=3 \
+  --audit-log-maxage=30 \
+  --audit-log-maxbackup=3 \
+  --audit-log-maxsize=100 \
+  --audit-log-path=/var/log/kube-apiserver-audit.log \
+  --event-ttl=1h \
+  --alsologtostderr=true \
+  --logtostderr=false \
+  --log-dir=/var/log/kubernetes/kube-apiserver \
+  --v=4"

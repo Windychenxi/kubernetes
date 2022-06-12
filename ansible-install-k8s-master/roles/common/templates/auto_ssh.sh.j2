@@ -1,0 +1,25 @@
+#/bin/bash
+
+SERVERS="{% for host in groups['k8s'] %} {{ hostvars[host].node_name }}{% endfor %}"   #需要配置的主机名
+USER="{{ user }}"       #用户
+PASSWORD="{{ password }}"   #需要配置的主机登录密码
+
+auto_ssh_copy_id(){
+        expect -c "set timeout -1;
+        spawn ssh-copy-id $1;                                
+        expect {
+                *(yes/no)* {send -- yes\r;exp_continue;}
+                *password:* {send -- $2\r;exp_continue;}  
+                eof        {exit 0;}
+        }";
+}
+
+ssh_copy_id_to_all(){
+        for SERVER in $SERVERS #遍历要发送到各个主机的ip
+           do
+                auto_ssh_copy_id $USER@$SERVER $PASSWORD
+           done
+}
+
+
+ssh_copy_id_to_all

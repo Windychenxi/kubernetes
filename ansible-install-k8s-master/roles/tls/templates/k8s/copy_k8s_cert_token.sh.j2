@@ -1,0 +1,4 @@
+#!/bin/bash
+{% for host in groups['k8s'] %}
+	scp ca*.pem kube-apiserver*.pem token.csv root@{{ hostvars[host].node_name }}:{{ tmp_dir }}/
+{% endfor %}

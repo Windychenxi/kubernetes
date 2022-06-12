@@ -1,0 +1,37 @@
+[master]
+192.168.10.12 node_name=k8s-master-1
+192.168.10.13 node_name=k8s-master-2
+192.168.10.14 node_name=k8s-master-3
+
+[worker]
+192.168.10.15 node_name=k8s-worker-1
+
+[etcd]
+192.168.10.12 etcd_name=etcd-1
+192.168.10.13 etcd_name=etcd-2
+192.168.10.14 etcd_name=etcd-3
+
+[lb]
+192.168.10.10 node_name=lb-server
+192.168.10.11 node_name=lb-backup
+
+[k8s:children]
+master
+worker
+
+[hak8s:children]
+master
+worker
+lb
+
+[mainMaster]
+192.168.10.12 node_name=k8s-master-1
+
+[mainEtcd]
+192.168.10.12 etcd_name=etcd-1
+
+[mainWorker]
+192.168.10.15 node_name=k8s-worker-1
+
+[newWorker]
+

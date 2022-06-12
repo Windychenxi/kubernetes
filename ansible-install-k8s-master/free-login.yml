@@ -1,0 +1,8 @@
+---
+- name: 配置免密登陆
+  gather_facts: false
+  hosts: mainMaster
+  roles:
+    - freelogin
+  tags:
+    freelogin

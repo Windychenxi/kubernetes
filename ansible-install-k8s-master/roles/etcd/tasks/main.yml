@@ -1,0 +1,93 @@
+---
+# tasks file for etcd
+
+- name: 创建工作目录 0
+  file:
+    dest: "{{ etcd_work_dir }}/{{ item }}"
+    state: directory
+  with_items:
+    - bin
+    - cfg
+    - ssl
+
+- name: 创建工作目录 1
+  file:
+    dest: /var/lib/etcd/default.etcd
+    state: directory
+    mode: 700
+    
+- name: 创建临时目录
+  file:
+    dest: "{{ tmp_dir }}"
+    state: directory
+
+- name: 分发并解压 etcd 二进制包
+  unarchive:
+    src: "{{ item }}"
+    dest: "{{ tmp_dir }}"
+  with_fileglob:
+    - binary_pkg/etcd-v*.tar.gz
+
+- name: 移动 etcd 二进制文件
+  shell: cp -fr {{ tmp_dir }}/etcd-v*/{etcd,etcdctl,etcdutl} /usr/local/bin/
+
+- name: 分发 etcd.conf 配置文件
+  template:
+    src: etcd.conf.j2
+    dest: "{{etcd_work_dir}}/cfg/etcd.conf"
+
+- name: 移动证书
+  shell: cd {{ tmp_dir }}/ && cp ca*.pem {{ etcd_work_dir }}/ssl && cp etcd*.pem {{ etcd_work_dir }}/ssl
+
+- name: 分发 etcd.service 配置文件
+  template: 
+    src: etcd.service.j2
+    dest: /etc/systemd/system/etcd.service
+    mode: 700
+
+- name: 启动 daemon-reload
+  service:
+    name: daemon-reload
+
+- name: 启动 etcd 集群
+  service:
+    name: etcd
+    enabled: yes
+    state: started
+
+- name: 创建验证集群脚本
+  template: 
+    src: "{{ item }}"
+    dest: "{{ etcd_work_dir }}/bin/{{ item.split('.')[:-1]|join('.') }}"
+    mode: 700
+  with_items:
+    - check_etcd_health.sh.j2
+    - check_etcd_learner.sh.j2
+    - check_etcd_leader.sh.j2
+    # - check_etcd_performance.sh.j2
+
+- name: 执行验证集群脚本
+  shell: cd {{ etcd_work_dir }}/bin/ && sh check_etcd_health.sh
+  register: etcd_health
+
+# - name: 执行检查数据库性能脚本
+#   shell: cd {{ etcd_work_dir }}/bin/ && sh check_etcd_performance.sh
+#   register: etcd_performance
+
+#- name: 执行检查 learner 脚本
+#  shell: cd {{ etcd_work_dir }}/bin/ && sh check_etcd_learner.sh
+#  register: etcd_learner
+
+- name: 执行检查 leader 脚本
+  shell: cd {{ etcd_work_dir }}/bin/ && sh check_etcd_leader.sh
+  register: etcd_leader
+
+#- name: 查看健康状态\数据库性能\learner\leader 状态
+- name: 查看健康状态 | leader 信息
+  debug:
+    msg: 
+      - "{{ etcd_health.stdout_lines }}"
+      - "{{ etcd_leader.stdout_lines }}"
+#       - "{{ etcd_performance.stdout_lines }}"
+#      - "{{ etcd_learner.stdout_lines }}"
+

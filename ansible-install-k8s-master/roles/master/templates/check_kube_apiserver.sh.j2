@@ -1,0 +1,4 @@
+{% for host in groups['master'] %}
+curl --insecure https://{{ hostvars[host].inventory_hostname }}:6443/
+{% endfor %}
+curl --insecure https://{{ vip }}:6443/

@@ -1,0 +1,43 @@
+---
+# - name: 部署 keepalived
+#   gather_facts: false
+#   hosts: lb
+#   roles:
+#    - keepalived
+#   tags:
+#    keepalived
+
+# - name: 配置免密登陆
+#   gather_facts: false
+#   hosts: mainMaster
+#   roles:
+#     - freelogin
+#   tags:
+#     freelogin
+
+- name: 创建各类证书
+  gather_facts: false
+  hosts: mainMaster
+  roles:
+    - tls
+  tags:
+    tls
+    
+# - name: 部署 etcd
+#   ignore_errors: true
+#   gather_facts: false
+#   hosts: etcd
+#   roles:
+#     - etcd
+#   tags:
+#     etcd
+
+- name: 部署 kube-server
+  ignore_errors: true
+  gather_facts: false
+  hosts: master
+  roles:
+    - kubernetes
+  tags:
+    kubernetes
+

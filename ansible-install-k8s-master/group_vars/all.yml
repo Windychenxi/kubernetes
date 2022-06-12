@@ -1,0 +1,47 @@
+# 安装目录
+k8s_work_dir: '/etc/kubernetes'
+etcd_work_dir: '/etc/etcd'
+tmp_dir: '/tmp/k8s'
+
+# 高可用，如果部署单Master，该项忽略
+vip: '192.168.10.100'
+nic: 'ens33'
+
+# 集群网络
+service_cluster_ip_range: '10.96.0.0/16'
+service_node_port_range: '30000-32767'
+
+cluster_cidr: '10.244.0.0/16'
+clusterDNS: '10.96.0.2'
+clusterDomain: 'cluster.local'
+
+
+# 自签证书可信任 IP 列表
+cert_hosts:
+  k8s:
+    - 127.0.0.1
+    - 192.168.10.12
+    - 192.168.10.13
+    - 192.168.10.14
+    - 192.168.10.15
+    - 192.168.10.16
+    - 192.168.10.17
+    - 192.168.10.18
+    - 192.168.10.19
+    - 192.168.10.20
+    - 192.168.10.100
+    - kubernetes
+    - kubernetes.default
+    - kubernetes.default.svc
+    - kubernetes.default.svc.cluster
+    - kubernetes.default.svc.cluster.local
+    - 10.96.0.1
+  etcd:
+    - 127.0.0.1
+    - 192.168.10.12
+    - 192.168.10.13
+    - 192.168.10.14
+
+# 免密登陆配置
+user: 'root'
+password: '123456'

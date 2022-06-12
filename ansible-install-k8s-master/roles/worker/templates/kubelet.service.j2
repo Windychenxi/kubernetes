@@ -1,0 +1,30 @@
+[Unit]
+Description=Kubernetes Kubelet
+Documentation=https://github.com/kubernetes/kubernetes
+After=containerd.service
+Requires=containerd.service
+
+[Service]
+WorkingDirectory=/var/lib/kubelet
+ExecStart=/usr/local/bin/kubelet \
+  --bootstrap-kubeconfig={{ k8s_work_dir }}/kubelet-bootstrap.kubeconfig \
+  --cert-dir={{ k8s_work_dir }}/ssl \
+  --kubeconfig={{ k8s_work_dir }}/kubelet.kubeconfig \
+  --config={{ k8s_work_dir }}/kubelet.json \
+  --cni-bin-dir=/opt/cni/bin \
+  --cni-conf-dir=/etc/cni/net.d \
+  --container-runtime=remote \
+  --container-runtime-endpoint=unix:///run/containerd/containerd.sock \
+  --network-plugin=cni \
+  --rotate-certificates \
+  --pod-infra-container-image=registry.aliyuncs.com/google_containers/pause:3.2 \
+  --root-dir=/etc/cni/net.d \
+  --alsologtostderr=true \
+  --logtostderr=false \
+  --log-dir=/var/log/kubernetes\kubelet \
+  --v=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

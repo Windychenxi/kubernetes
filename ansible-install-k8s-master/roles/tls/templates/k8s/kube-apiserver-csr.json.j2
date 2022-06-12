@@ -1,0 +1,23 @@
+{% set number=cert_hosts.k8s | length %}
+{
+"CN": "kubernetes",
+  "hosts": [
+    {% for ip in cert_hosts.k8s %}
+      {% if number == loop.index %}"{{ ip }}"{% else %}"{{ ip }}",
+      {% endif %}
+    {% endfor %}
+  ],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "ST": "Beijing",
+      "L": "Beijing",
+      "O": "kubemsb",
+      "OU": "CN"
+    }
+  ]
+}

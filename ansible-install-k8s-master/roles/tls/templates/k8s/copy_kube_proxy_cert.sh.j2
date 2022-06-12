@@ -1,0 +1,4 @@
+#!/bin/bash
+{% for host in groups['k8s'] %}
+	scp ca*.pem kube-proxy*.pem root@{{ hostvars[host].node_name }}:{{ tmp_dir }}/
+{% endfor %}

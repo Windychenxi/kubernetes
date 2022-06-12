@@ -1,0 +1,286 @@
+---
+# tasks file for common
+
+# --------------------------- 配置主机名 -------------------------------------------
+
+- name: 准备主机名
+  when: inventory_hostname in groups['hak8s']
+  raw: "echo {{node_name|quote}} > /etc/hostname"
+
+- name: 修改主机名
+  when: inventory_hostname in groups['hak8s']
+  shell: hostname {{node_name|quote}}
+
+# --------------------------- 主机与IP地址解析 --------------------------------------
+
+- name: 主机与IP地址解析
+  template:
+    src: hosts.j2
+    dest: /etc/hosts
+
+# --------------------------- 关闭 firewalld --------------------------------------
+
+- name: 关闭 firewalld
+  service:
+    name: firewalld
+    state: stopped
+    enabled: no
+
+# --------------------------- 关闭 selinux -----------------------------------------
+
+- name: 关闭 selinux
+  lineinfile:
+    dest: /etc/selinux/config
+    regexp: "^SELINUX="
+    line: "SELINUX=disabled"
+
+# --------------------------- 关闭 swap --------------------------------------------
+
+- name: 关闭 swap
+  lineinfile:
+    dest: /etc/fstab
+    regexp: "UUID.*swap"
+    line: ""
+
+- name: 修改 swap 内核参数，并立即生效
+  shell: echo "vm.swappiness=0" >> /etc/sysctl.conf ; sysctl -p
+
+- name: 即时生效
+  shell: setenforce 0 ; swapoff -a
+
+# --------------------------- 主机系统优化 -------------------------------------------
+
+- name: 主机系统优化
+  shell: 
+    cmd: ulimit -SHn 65535
+    
+- name: 分发主机系统优化配置
+  copy: 
+    src: limits.conf
+    dest: /etc/security/limits.conf
+
+# --------------------------- 主机时间同步 -------------------------------------------
+
+# - name: 安装 ntpdate
+#   yum:
+#     name: ntpdate
+#     state: present
+  
+- name: ntpdate 主机系统时间同步
+  shell: ntpdate time.windows.com
+
+- name: 获取 Ansible 工作目录
+  shell: pwd |sed 's#roles/crontab##' 
+  register: root_dir 
+
+- name: crontab 创建 crontab 目录
+  file: 
+    dest: "{{ k8s_work_dir }}/crontab/"
+    state: directory
+
+- name: crontab 分发同步时间任务
+  copy:
+    src: crontab.cron
+    dest: "{{ k8s_work_dir }}/crontab/crontab.cron"
+
+- name: crontab 时间同步任务生效
+  shell: crontab {{ k8s_work_dir }}/crontab/crontab.cron
+
+# --------------------------- Linux 内核升级 --------------------------------------
+
+# 在所有节点中安装，需要更新操作系统更换内核
+- name: Linux 内核升级
+  yum:
+    name: perl
+    state: latest
+
+# - name: 导入 GPG 文件
+#   shell:
+#     cmd: rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
+#     warn: false
+
+# - name: 安装 elrepo
+#   yum: 
+#     name: elrepo-release
+#     download_dir: https://www.elrepo.org/elrepo-release-7.0-4.el7.elrepo.noarch.rpm
+#     state: present
+
+# - name: 安装 kernel-ml
+#   yum:
+#     name: kernel-ml
+#     enablerepo: elrepo-kernel
+#     state: present
+
+- name: 创建临时目录
+  file:
+    dest: "{{ tmp_dir }}"
+    state: directory
+
+- name: 分发 kernel-ml 二进制包
+  copy:
+    src: "{{ item }}"
+    dest: "{{ tmp_dir }}/{{ item.split('/')[-1] }}"
+  with_fileglob:
+    - binary_pkg/kernel-ml*.rpm
+
+- name: 安装 kernel-ml
+  yum:
+    name: "{{ tmp_dir }}/{{ item.split('/')[-1] }}"
+    # name: "{{ tmp_dir }}/{{ lookup('fileglob', ['/binary_pkg/kernel-ml*.rpm'])[0] }}.split('/')[-1]"
+    state: present
+  with_fileglob: binary_pkg/kernel-ml*.rpm
+
+- name: 设置 grub2，让 Linux 使用此内核启动
+  shell:
+    cmd: grub2-set-default 0
+
+- name: grub2 配置文件编译生效
+  shell:
+    cmd: grub2-mkconfig -o /boot/grub2/grub.cfg
+
+- name: 分发 Linux 内核优化配置
+  copy:
+    src: k8s.conf
+    dest: /etc/sysctl.d/k8s.conf
+
+- name: Linux 优化配置生效
+  shell:
+    cmd: sysctl --system
+
+#--------------------------- 安装 ipvs 模块及加载 -------------------------------
+
+# 为集群节点安装，负载均衡节点不用安装
+- name: ipvs 管理工具安装及模块加载
+  when: inventory_hostname in groups['k8s']
+  yum:
+    name:
+      - ipvsadm
+      - ipset
+      - sysstat
+      - conntrack
+      - libseccomp
+    state: present
+
+# 所有节点配置 ipvs 模块，在内核4.19+版本 nf_conntrack_ipv4 已经改为 nf_conntrack， 4.18以下使用nf_conntrack_ipv4即可
+- name: ipvs 创建依赖配置文件存放目录
+  file:
+    path: /etc/sysconfig/moduloes
+    state: directory
+
+- name: ipvs 创建依赖配置文件
+  when: inventory_hostname in groups['k8s']
+  copy:
+    src: ipvs.modules
+    dest: /etc/sysconfig/modules/ipvs.modules
+    mode: 700
+
+- name: ipvs 引导配置文件
+  when: inventory_hostname in groups['k8s']
+  shell:
+    cmd: /etc/sysconfig/modules/ipvs.modules
+
+- name: ipvs 创建配置文件
+  when: inventory_hostname in groups['k8s']
+  copy:
+    src: ipvs.conf
+    dest: /etc/modules-load.d/ipvs.conf
+
+#--------------------------- 加载 containerd 相关内核模块 -------------------------------
+
+- name: containerd 临时加载:创建依赖配置文件
+  copy:
+    src: containerd.modules
+    dest: /etc/sysconfig/modules/containerd.modules
+    mode: 700
+
+- name: containerd 临时加载:引导配置文件
+  shell:
+    cmd: /etc/sysconfig/modules/containerd.modules
+
+- name: containerd 永久加载模块
+  copy:
+    src: containerd.conf
+    dest: /etc/modules-load.d/containerd.conf
+
+- name: containerd 设置开机自启动
+  systemd: 
+    name: systemd-modules-load
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+# 所有节点配置完内核后，重启服务器，保证重启后内核依旧加载
+- name: reboot 重启服务器
+  command: /sbin/shutdown -r +1 "Ansible-triggered Reboot"
+  async: 0
+  poll: 0
+
+- name: (reboot) 等待服务器重启, 等待时间 75 秒
+  wait_for_connection:
+    delay: 75
+
+- name: 重启后查看 ipvs 
+  shell:
+    cmd: lsmod | grep --color=auto -e ip_vs -e nf_conntrack
+  register: ipvs_status
+
+- name: ipvs 加载状况
+  debug:
+    msg: "{{ ipvs_status.stdout }}"
+
+- name: 重启后查看 containerd
+  shell:
+    cmd: lsmod | egrep 'br_netfilter | overlay'
+  register: containerd_status
+
+- name: containerd 加载状况
+  debug:
+    msg: "{{ containerd_status.stdout }}"
+
+- name: 其它工具安装（选装）
+  ignore_errors: true
+  yum:
+    name:
+      - wget
+      - jq
+      - psmisc
+      - vim
+      - net-tools
+      - telnet
+      - yum-utils
+      - device-mapper-persistent-data
+      - lvm2
+      - git
+      - lrzsz
+    state: present
+
+# -------------------------------- 免密登陆 -------------------------------------
+
+- name: 分发 expect 二进制包
+  when: inventory_hostname in groups['mainMaster']
+  unarchive:
+    src: binary_pkg/expect.tar.gz
+    dest: "{{ tmp_dir }}"
+
+- name: 安装 expect
+  when: inventory_hostname in groups['mainMaster']
+  yum:
+    name: ['{{tmp_dir}}/expect/expect-5.45-14.el7_1.x86_64.rpm', '{{tmp_dir}}/expect/tcl-8.5.13-8.el7.i686.rpm', '{{tmp_dir}}/expect/tcl-8.5.13-8.el7.x86_64.rpm']
+    state: present
+
+- name: 生成免密密钥
+  when: inventory_hostname in groups['mainMaster']
+  ignore_errors: true
+  shell: ssh-keygen -t rsa -f /root/.ssh/id_rsa -P "" <<< y
+
+- name: 分发免密登陆脚本
+  when: inventory_hostname in groups['mainMaster']
+  template:
+    src: auto_ssh.sh.j2
+    dest: "{{ tmp_dir }}/auto_ssh.sh"
+    mode: 700
+
+- name: 执行免密登陆脚本
+  when: inventory_hostname in groups['mainMaster']
+  shell: "{{ tmp_dir }}/auto_ssh.sh"
+

@@ -1,0 +1,52 @@
+---
+# tasks file for ha
+
+# ------------------------ 安装 haproxy ---------------------------------
+
+- name: haproxy 开始安装
+  yum:
+    name: haproxy
+    state: latest
+
+- name: haproxy 分发配置
+  template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+
+# ------------------------ 安装 keepalived -------------------------------
+
+- name: keepalived 开始安装
+  yum:
+    name: keepalived
+    state: present
+
+- name: keepalived 分发配置
+  template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+
+- name: keepalived 健康检查脚本
+  copy:
+    src: check_apiserver.sh
+    dest: /etc/keepalived/check_apiserver.sh
+    mode: a+x
+
+- name: 启动服务 aemon-reload
+  service:
+    name: daemon-reload
+
+- name: 启动服务 haproxy, keepalived
+  service:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  loop: [haproxy, keepalived]
+
+- name: 验证服务
+  shell:
+    cmd: ip address show
+  register: ipShow
+
+- name: 查看服务
+  debug:
+    msg: "{{ ipShow.stdout_lines }}"

@@ -1,0 +1,7 @@
+KUBE_SCHEDULER_OPTS="--address=127.0.0.1 \
+--kubeconfig={{ k8s_work_dir }}/kube-scheduler.kubeconfig \
+--leader-elect=true \
+--alsologtostderr=true \
+--logtostderr=false \
+--log-dir=/var/log/kubernetes\kube-scheduler \
+--v=2"

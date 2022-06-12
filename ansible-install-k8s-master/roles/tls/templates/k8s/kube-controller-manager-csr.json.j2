@@ -1,0 +1,23 @@
+{% set number=cert_hosts.k8s | length %}
+{
+    "CN": "system:kube-controller-manager",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "hosts": [
+    {% for ip in cert_hosts.k8s %}
+      {% if number == loop.index %}"{{ ip }}"{% else %}"{{ ip }}",
+      {%endif%}
+    {% endfor %}
+    ],
+    "names": [
+      {
+        "C": "CN",
+        "ST": "Beijing",
+        "L": "Beijing",
+        "O": "system:kube-controller-manager",
+        "OU": "system"
+      }
+    ]
+}

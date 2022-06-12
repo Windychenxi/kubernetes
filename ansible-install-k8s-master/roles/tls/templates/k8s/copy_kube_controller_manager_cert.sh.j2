@@ -1,0 +1,4 @@
+#!/bin/bash
+{% for host in groups['master'] %}
+	scp ca*.pem kube-controller-manager*.pem root@{{ hostvars[host].node_name }}:{{ tmp_dir }}/
+{% endfor %}

@@ -1,0 +1,49 @@
+---
+#- name: 0.系统初始化
+#  gather_facts: false
+#  hosts: all
+#  roles:
+#    - common
+#  tags: common
+#
+#- name: 部署 haproxy
+#  gather_facts: false
+#  hosts: lb
+#  roles:
+#    - ha
+#  tags:
+#    ha
+#
+#- name: 创建各类证书
+#  gather_facts: false
+#  hosts: mainMaster
+#  roles:
+#    - tls
+#  tags:
+#    tls
+#
+#- name: 部署 etcd
+#  ignore_errors: true
+#  gather_facts: false
+#  hosts: etcd
+#  roles:
+#    - etcd
+#  tags:
+#    etcd
+
+- name: 部署 master(kube-apiserver | kube-controller-manager | kube-scheduler)
+  ignore_errors: true
+  gather_facts: false
+  hosts: k8s
+  roles:
+    - master
+  tags:
+    master
+
+- name: 部署 worker(contenerd | runc | kubelet | kube-proxy)
+  gather_facts: false
+  hosts: k8s
+  roles:
+    - worker
+  tags:
+    worker
