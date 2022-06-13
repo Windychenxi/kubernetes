@@ -28,7 +28,6 @@
     - "{{ software_dir }}/kubernetes*.tar.gz"
 
 - name: 移动 kubernetes 二进制文件
-  when: inventory_hostname in groups['master']
   shell: |
     cp -fr {{ tmp_dir }}/kubernetes/server/bin/{kube-apiserver,kube-controller-manager,kube-scheduler,kubectl} /usr/local/bin/
 

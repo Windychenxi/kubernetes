@@ -37,23 +37,6 @@
 - name: 移动 kubernetes 二进制文件
   shell: cp -fr {{ tmp_dir }}/kubernetes/server/bin/{kubectl,kubelet,kube-proxy} /usr/local/bin/
 
-## -------------------------------- 安装 runc --------------------------------
-#- name: 替换掉原软件包中的 runc
-#  copy:
-#    src: "{{ item }}"
-#    dest: /usr/local/sbin/runc
-#    mode: 700
-#  with_fileglob:
-#    - "{{ software_dir }}/runc.amd64"
-#
-#- name: 获取 runc 版本信息
-#  shell: runc -v
-#  register: runc_info
-#
-#- name: 查看 runc 版本信息
-#  debug:
-#    msg: "{{ runc_info.stdout_lines}}"
-
 #----------------------------------部署 kubernetes -------------------------------------
 
 - name: 分发 config 生成脚本

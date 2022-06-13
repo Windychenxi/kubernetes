@@ -57,10 +57,10 @@
 
 #---------------------------------- 部署 dashboard -------------------------------------
 
-- name: 部署 dashboard
+- name: 部署 dashboard | 分发 dashboard.yaml 文件
   copy:
     src: "{{ item }}"
-    dest: "{{ kubernetes_work_dir }}"
+    dest: "{{ kubernetes_work_dir }}/{{ item }}"
   with_items:
     - dashboard-admin-user.yaml
     - dashboard-ClusterRoleBinding.yaml
@@ -79,8 +79,7 @@
   when: inventory_hostname in groups['mainWorker']
   shell: |
     web='https://NodeIP:30001'  \
-    && token=$(kubectl describe secrets -n kubernetes-dashboard \
-    && $(kubectl get secret -n kubernetes-dashboard | awk '/dashboard-admin/{print $1}') |awk '/^token/{print $2}') \
+    && token=$(kubectl describe secrets -n kubernetes-dashboard $(kubectl get  secrets -n kubernetes-dashboard |grep admin-user | awk '{print $1}')) \
     && echo "访问地址--->$web"  \
     && echo "令牌内容--->$token"
   register: ui
@@ -88,5 +87,31 @@
 - name: Kubernetes Dashboard登录信息
   when: inventory_hostname in groups['mainWorker']
   debug: var=ui.stdout_lines
+
+#---------------------------------- 部署 kuboard -------------------------------------
+
+- name: 部署 kuboard | 分发 kuboard.yaml 文件
+  copy:
+    src: kuboard.yaml
+    dest: "{{ kubernetes_work_dir }}/kuboard.yaml"
+
+- name: 挂载 kuboard 服务
+  when: inventory_hostname in groups['mainWorker']
+  shell: |
+    cd {{ kubernetes_work_dir }}  \
+    && kubectl apply -f kuboard.yaml
+
+- name: 获取 kuboard 管理员令牌
+  when: inventory_hostname in groups['mainWorker']
+  shell: |
+    kuboard_web='https://NodeIP:32567'  \
+    && kuboard_token=$(kubectl describe secrets -n kube-system $(kubectl get  secrets -n kube-system |grep kuboard-user|awk '{print $1}'))  \
+    && echo "访问地址--->$kuboard_web"  \
+    && echo "令牌内容--->$kuboard_token"
+  register: kuboard_ui
+
+- name: kuboard 登录信息
+  when: inventory_hostname in groups['mainWorker']
+  debug: var=kuboard_ui.stdout_lines
 
 
