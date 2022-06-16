@@ -21,30 +21,37 @@
 
 #---------------------------------- 查看集群状态 -------------------------------------
 - name: 获取 node 节点信息
-  shell: kubectl get nodes
+  when: inventory_hostname in groups['mainWorker']
+  shell: sleep 5 && kubectl get nodes
   register: nodes_info
 
 - name: 获取 pods 信息
-  shell: kubectl get pods --all-namespaces
+  when: inventory_hostname in groups['mainWorker']
+  shell: sleep 5 && kubectl get pods --all-namespaces
   register: pods_info
 
 - name: 获取 csr 信息
-  shell: kubectl get csr
+  when: inventory_hostname in groups['mainWorker']
+  shell: sleep 5 && kubectl get csr
   register: csr_info
 
 - name: 获取集群信息
-  shell: kubectl cluster-info
+  when: inventory_hostname in groups['mainWorker']
+  shell: sleep 5 && kubectl cluster-info
   register: kube_cluster_info
 
 - name: 获取集群组件状态
-  shell: kubectl get componentstatuses
+  when: inventory_hostname in groups['mainWorker']
+  shell: sleep 5 && kubectl get componentstatuses
   register: kube_component_status
 
 - name: 获取命名空间中的资源对象
-  shell: kubectl get all --all-namespaces
+  when: inventory_hostname in groups['mainWorker']
+  shell: sleep 5 && kubectl get all --all-namespaces
   register: kube_all_namespaces
 
 - name: 查看(node | pods | csr | cluster | component | all)
+  when: inventory_hostname in groups['mainWorker']
   debug:
     msg:
       - "{{ nodes_info.stdout_lines }}"
@@ -78,7 +85,8 @@
   ignore_errors: yes
   when: inventory_hostname in groups['mainWorker']
   shell: |
-    web='https://NodeIP:30001'  \
+    sleep 5 \
+    && web='https://NodeIP:30001'  \
     && token=$(kubectl describe secrets -n kubernetes-dashboard $(kubectl get  secrets -n kubernetes-dashboard |grep admin-user | awk '{print $1}')) \
     && echo "访问地址--->$web"  \
     && echo "令牌内容--->$token"
@@ -104,7 +112,8 @@
 - name: 获取 kuboard 管理员令牌
   when: inventory_hostname in groups['mainWorker']
   shell: |
-    kuboard_web='https://NodeIP:32567'  \
+    sleep 5 \
+    && kuboard_web='https://NodeIP:32567'  \
     && kuboard_token=$(kubectl describe secrets -n kube-system $(kubectl get  secrets -n kube-system |grep kuboard-user|awk '{print $1}'))  \
     && echo "访问地址--->$kuboard_web"  \
     && echo "令牌内容--->$kuboard_token"
