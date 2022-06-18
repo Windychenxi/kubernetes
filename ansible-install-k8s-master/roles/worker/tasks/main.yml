@@ -95,3 +95,25 @@
   with_items:
     - kubelet
     - kube-proxy
+
+#----------------------------------部署 metrics-server -------------------------------------
+# 单节点执行即可
+- name: 分发 metrics-server.yaml
+  when: inventory_hostname in groups['mainWorker']
+  copy:
+    src: metrics-server.yaml
+    dest: "{{ kubernetes_work_dir }}/metrics-server.yaml"
+
+- name: 部署 metrics-server
+  when: inventory_hostname in groups['mainWorker']
+  shell: cd {{ kubernetes_work_dir }} && kubectl apply -f metrics-server.yaml
+
+#- name: 获取 metrics-server 聚合的节点信息
+#  when: inventory_hostname in groups['mainWorker']
+#  shell: sleep 5 && kubectl top node
+#  register: node_info
+#
+#- name: 查看 metrics-server 聚合的节点信息
+#  when: inventory_hostname in groups['mainWorker']
+#  debug:
+#    msg: "{{ node_info.stdout_lines }}"

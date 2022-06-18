@@ -24,6 +24,14 @@ KUBE_APISERVER_OPTS="--enable-admission-plugins=NamespaceLifecycle,NodeRestricti
   --etcd-certfile={{ etcd_work_dir }}/ssl/etcd.pem \
   --etcd-keyfile={{ etcd_work_dir }}/ssl/etcd-key.pem \
   --etcd-servers={% for ip in groups ['master'] %}{% if not loop.last %}https://{{ ip }}:2379,{% else %}https://{{ ip }}:2379 \{% endif %}{% endfor %}
+  --requestheader-client-ca-file={{ kubernetes_work_dir }}/ssl/ca.pem \
+  --proxy-client-cert-file={{ kubernetes_work_dir }}/ssl/kube-apiserver.pem \
+  --proxy-client-key-file={{ kubernetes_work_dir }}/ssl/kube-apiserver-key.pem \
+  --requestheader-allowed-names=kubernetes \
+  --requestheader-extra-headers-prefix=X-Remote-Extra- \
+  --requestheader-group-headers=X-Remote-Group \
+  --requestheader-username-headers=X-Remote-User \
+  --enable-aggregator-routing=true \
   --enable-swagger-ui=true \
   --allow-privileged=true \
   --apiserver-count=3 \
