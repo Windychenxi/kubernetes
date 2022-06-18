@@ -236,22 +236,22 @@
   debug:
     msg: "{{ containerd_status.stdout }}"
 
-- name: 其它工具安装（选装）
-  ignore_errors: true
-  yum:
-    name:
-      - wget
-      - jq
-      - psmisc
-      - vim
-      - net-tools
-      - telnet
-      - yum-utils
-      - device-mapper-persistent-data
-      - lvm2
-      - git
-      - lrzsz
-    state: present
+#- name: 其它工具安装（选装）
+#  ignore_errors: true
+#  yum:
+#    name:
+#      - wget
+#      - jq
+#      - psmisc
+#      - vim
+#      - net-tools
+#      - telnet
+#      - yum-utils
+#      - device-mapper-persistent-data
+#      - lvm2
+#      - git
+#      - lrzsz
+#    state: present
 
 # -------------------------------- 免密登陆 -------------------------------------
 
