@@ -64,37 +64,37 @@
 
 #---------------------------------- 部署 dashboard -------------------------------------
 
-- name: 部署 dashboard | 分发 dashboard.yaml 文件
-  copy:
-    src: "{{ item }}"
-    dest: "{{ kubernetes_work_dir }}/{{ item }}"
-  with_items:
-    - dashboard-admin-user.yaml
-    - dashboard-ClusterRoleBinding.yaml
-    - recommended.yaml
-
-- name: 创建 Dashboard 管理员令牌
-  when: inventory_hostname in groups['mainWorker']
-  shell: |
-    cd {{ kubernetes_work_dir }}  \
-    && kubectl apply -f recommended.yaml  \
-    && kubectl apply -f dashboard-admin-user.yaml  \
-    && kubectl apply -f dashboard-ClusterRoleBinding.yaml
-
-- name: 获取 Dashboard 管理员令牌
-  ignore_errors: yes
-  when: inventory_hostname in groups['mainWorker']
-  shell: |
-    sleep 5 \
-    && web='https://NodeIP:30001'  \
-    && token=$(kubectl describe secrets -n kubernetes-dashboard $(kubectl get  secrets -n kubernetes-dashboard |grep admin-user | awk '{print $1}')) \
-    && echo "访问地址--->$web"  \
-    && echo "令牌内容--->$token"
-  register: ui
-
-- name: Kubernetes Dashboard登录信息
-  when: inventory_hostname in groups['mainWorker']
-  debug: var=ui.stdout_lines
+#- name: 部署 dashboard | 分发 dashboard.yaml 文件
+#  copy:
+#    src: "{{ item }}"
+#    dest: "{{ kubernetes_work_dir }}/{{ item }}"
+#  with_items:
+#    - dashboard-admin-user.yaml
+#    - dashboard-ClusterRoleBinding.yaml
+#    - recommended.yaml
+#
+#- name: 创建 Dashboard 管理员令牌
+#  when: inventory_hostname in groups['mainWorker']
+#  shell: |
+#    cd {{ kubernetes_work_dir }}  \
+#    && kubectl apply -f recommended.yaml  \
+#    && kubectl apply -f dashboard-admin-user.yaml  \
+#    && kubectl apply -f dashboard-ClusterRoleBinding.yaml
+#
+#- name: 获取 Dashboard 管理员令牌
+#  ignore_errors: yes
+#  when: inventory_hostname in groups['mainWorker']
+#  shell: |
+#    sleep 5 \
+#    && web='https://NodeIP:30001'  \
+#    && token=$(kubectl describe secrets -n kubernetes-dashboard $(kubectl get  secrets -n kubernetes-dashboard |grep admin-user | awk '{print $1}')) \
+#    && echo "访问地址--->$web"  \
+#    && echo "令牌内容--->$token"
+#  register: ui
+#
+#- name: Kubernetes Dashboard登录信息
+#  when: inventory_hostname in groups['mainWorker']
+#  debug: var=ui.stdout_lines
 
 #---------------------------------- 部署 kuboard -------------------------------------
 
@@ -123,4 +123,27 @@
   when: inventory_hostname in groups['mainWorker']
   debug: var=kuboard_ui.stdout_lines
 
+#---------------------------------- 部署 Helm 客户端 -------------------------------------
+#
+#- name: 解压 Helm 软件包
+#  unarchive:
+#    src: "{{ item }}"
+#    dest: "{{ tmp_dir }}"
+#
+#- name: 拷贝 helm 命令到 /usr/bin/
+#  shell: cd {{ tmp_dir }} && mv {{ tmp_dir }}/linux-amd64/helm /usr/bin/
+#
+#- name: 添加 微软 | 阿里云 仓库
+#  shell:
+#    cmd: helm repo add stable http://mirror.azure.cn/kubernetes/charts
+#    cmd: helm repo add aliyun https://kubernetes.oss-cn-hangzhou.aliyuncs.com/charts
+#    cmd: helm repo update
 
+#---------------------------------- 部署 rook-ceph 分布式存储 -------------------------------------
+- name: 创建工作目录
+  file:
+    path: "/var/lib/kubelet/{{ item }}"
+    state: directory
+  with_items:
+    - pods
+    - plugins_registry

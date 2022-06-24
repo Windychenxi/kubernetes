@@ -72,6 +72,8 @@ oom_score = -999
           endpoint = [
             "http://harbor.kubemsb.com"
           ]
+        [plugins.cri.registry.mirrors."192.168.10.18:30080"]
+                  endpoint = ["http://192.168.10.18:30080"]
     [plugins.cri.x509_key_pair_streaming]
       tls_cert_file = ""
       tls_key_file = ""
